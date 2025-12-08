@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+scikit-learn
+plotly
+
+# pip install -r requirements.txt
+# This file lists the dependencies required for the project.
