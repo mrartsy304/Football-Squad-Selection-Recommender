@@ -72,23 +72,23 @@ collab_score = len(synergy_list ∩ selected_ids) / max(1, len(synergy_list))
 final_score = 0.75 * content_score + w_collab * collab_score
 ```
 
-###4️⃣ Player Selection
+### 4️⃣ Player Selection
 - Select a player from top recommendations.
 - Added players are saved in session state to prevent duplicates.
 - "Reset Squad" button clears all selected players.
 
-###5️⃣ Visualizations
+### 5️⃣ Visualizations
 - Radar Chart: Candidate vs Squad Average
 - Stacked Bar: Content vs Collaboration Score
 - Top 5 Attribute Comparison: Grouped bar chart
 - Boxplots: Attribute distribution by position
 - Top Candidates by Position: Top 5 candidates per position
 
-###Code Structure
+### Code Structure
 - app.py — Main Streamlit app
 - football_players_level3_10000.csv — Dataset
 - requirements.txt — Dependencies
-#Key Sections in app.py:
+# Key Sections in app.py:
 - Load dataset & cache with st.cache_data
 - Sidebar for attribute selection & toggle
 - Normalize attributes with MinMaxScaler
