@@ -1,9 +1,4 @@
 # 🏟️ Squad Formation Assistant
-
-[![Python](https://img.shields.io/badge/Python-3.13-blue)](https://www.python.org/)  
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.24-orange)](https://streamlit.io/)  
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-
 ---
 
 ## 📌 Project Overview
@@ -82,14 +77,14 @@ final_score = 0.75 * content_score + w_collab * collab_score
 - Added players are saved in session state to prevent duplicates.
 - "Reset Squad" button clears all selected players.
 
-  ###5️⃣ Visualizations
+###5️⃣ Visualizations
 - Radar Chart: Candidate vs Squad Average
 - Stacked Bar: Content vs Collaboration Score
 - Top 5 Attribute Comparison: Grouped bar chart
 - Boxplots: Attribute distribution by position
 - Top Candidates by Position: Top 5 candidates per position
 
-  ###Code Structure
+###Code Structure
 - app.py — Main Streamlit app
 - football_players_level3_10000.csv — Dataset
 - requirements.txt — Dependencies
