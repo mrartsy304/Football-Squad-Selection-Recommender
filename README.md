@@ -65,3 +65,46 @@ It also provides **visual insights** via radar charts, stacked bars, attribute c
 
 ```text
 content_score = (candidate_attributes ⋅ desired_attributes) / (||candidate|| * ||desired||)
+```
+
+**b) Collaborative Synergy Score:**
+```text
+collab_score = len(synergy_list ∩ selected_ids) / max(1, len(synergy_list))
+```
+
+**c)Final Score:**
+```text
+final_score = 0.75 * content_score + w_collab * collab_score
+```
+
+###4️⃣ Player Selection
+- Select a player from top recommendations.
+- Added players are saved in session state to prevent duplicates.
+- "Reset Squad" button clears all selected players.
+
+  ###5️⃣ Visualizations
+- Radar Chart: Candidate vs Squad Average
+- Stacked Bar: Content vs Collaboration Score
+- Top 5 Attribute Comparison: Grouped bar chart
+- Boxplots: Attribute distribution by position
+- Top Candidates by Position: Top 5 candidates per position
+
+  ###Code Structure
+- app.py — Main Streamlit app
+- football_players_level3_10000.csv — Dataset
+- requirements.txt — Dependencies
+#Key Sections in app.py:
+- Load dataset & cache with st.cache_data
+- Sidebar for attribute selection & toggle
+- Normalize attributes with MinMaxScaler
+- Session state for selected players
+- Compute content, collaboration, final scores
+- Filter candidates by position & score
+- Display current squad & top recommendations
+- Add player (prevents double-tap)
+- Visualizations: Radar, stacked bar, attribute comparison, distributions, top candidates
+
+  <img width="1010" height="623" alt="image" src="https://github.com/user-attachments/assets/bbd57879-bb2a-4dec-925c-e1aec0e588b1" />
+
+  <img width="998" height="368" alt="image" src="https://github.com/user-attachments/assets/5f08e733-b7c2-4bc6-905d-f753890347a4" />
+
