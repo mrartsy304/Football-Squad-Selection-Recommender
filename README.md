@@ -71,9 +71,9 @@ content_score = (candidate_attributes ⋅ desired_attributes) / (||candidate|| *
 collab_score = len(synergy_list ∩ selected_ids) / max(1, len(synergy_list))
 ```
 
-**c)**
+**c)Exponential Team Boost Score:**
 ```text
-team_score = 1 if candidate_team in current_squad_teams else 0
+team_score = 0.1 * (2^num_matching_squad_players - 1)
 ```
 
 **d)Final Score:**
