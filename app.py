@@ -21,7 +21,7 @@ st.set_page_config(
 # Load dataset
 # -------------------------------
 @st.cache_data  # Cache to avoid reloading CSV on every interaction
-def load_df(path="football_players_level3_10000.csv"):
+def load_df(path="football_players_dataset.csv"):
     df = pd.read_csv(path)  # Read CSV into pandas DataFrame
     # Convert synergy list string into Python list
     df["synergy_list"] = df["synergy_list"].fillna("").apply(lambda x: x.split(",") if x else [])
