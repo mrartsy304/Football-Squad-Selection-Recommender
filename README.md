@@ -9,7 +9,8 @@ It recommends players based on:
 - Desired player attributes  
 - Position filtering  
 - Collaborative synergy with already selected players  
-
+- Team compatibility (same team boost)
+  
 It also provides **visual insights** via radar charts, stacked bars, attribute comparisons, and position-based distributions.
 
 ---
@@ -33,11 +34,13 @@ It also provides **visual insights** via radar charts, stacked bars, attribute c
 | `name` | Player name |
 | `position` | Player position (GK, CB, ST, etc.) |
 | `overall_rating` | Overall rating of the player |
+| `team_name` | Player’s club/team |
 | `synergy_list` | List of player IDs that synergize well |
 | `pace, shooting, passing, defending, stamina, ...` | Numeric player attributes used for scoring |
 
 **Notes:**  
-- `synergy_list` is used for collaborative scoring.  
+- `synergy_list` is used for collaborative scoring.
+- `team_name` is used for team boost effect in recommendations. 
 - Numeric attributes are normalized before calculating similarity.
 
 ---
@@ -48,6 +51,7 @@ It also provides **visual insights** via radar charts, stacked bars, attribute c
 - Coach selects desired player attributes via sidebar.  
 - "Toggle All Attributes" button selects/deselects all attributes.  
 - Minimum final score can be set to filter recommendations.
+- Optional toggles for **synergy** and **team boost** effects.
 
 ### 2️⃣ Candidate Filtering
 - Removes already selected players from candidates.  
@@ -67,7 +71,12 @@ content_score = (candidate_attributes ⋅ desired_attributes) / (||candidate|| *
 collab_score = len(synergy_list ∩ selected_ids) / max(1, len(synergy_list))
 ```
 
-**c)Final Score:**
+**c)**
+```text
+team_score = 1 if candidate_team in current_squad_teams else 0
+```
+
+**d)Final Score:**
 ```text
 final_score = 0.75 * content_score + w_collab * collab_score
 ```
