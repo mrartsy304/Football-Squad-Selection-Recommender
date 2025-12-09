@@ -25,7 +25,7 @@ It also provides **visual insights** via radar charts, stacked bars, attribute c
 
 ## 📂 Dataset
 
-**File:** `football_players_level3_10000.csv`  
+**File:** `football_players_dataset.csv`  
 
 | Column | Description |
 |--------|-------------|
