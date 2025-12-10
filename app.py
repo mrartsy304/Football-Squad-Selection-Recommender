@@ -29,6 +29,33 @@ def load_df(path="football_players_dataset.csv"):
 df_all = load_df()
 
 # -------------------------------
+# Safe Cosine Similarity
+# -------------------------------
+def safe_cosine(a, b):
+    """Robust cosine similarity preventing divide-by-zero and invalid norms."""
+    a = np.array(a, dtype=float)
+    b = np.array(b, dtype=float)
+
+    # If arrays are empty
+    if a.size == 0 or b.size == 0:
+        return 0.0
+
+    # Replace NaN with 0
+    a = np.nan_to_num(a)
+    b = np.nan_to_num(b)
+
+    dot = np.dot(a, b)
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+
+    # If either norm is zero, similarity is zero
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+
+    return dot / (norm_a * norm_b)
+
+
+# -------------------------------
 # Identify numeric attributes
 # -------------------------------
 NUM_ATTRS = df_all.select_dtypes(include=np.number).columns.tolist()
@@ -59,6 +86,7 @@ with st.sidebar.expander("Attribute Selection", expanded=True):
                                       int((col_min+col_max)/2))
             selected_attrs[attr] = val
 
+# If no attributes selected → pick top 5 most important
 if not selected_attrs:
     for attr in NUM_ATTRS[:5]:
         selected_attrs[attr] = int(df_all[attr].mean())
@@ -104,18 +132,17 @@ with st.sidebar.expander("🤝 Collaboration & Team Boost", expanded=True):
 # Vectorized scoring
 # -------------------------------
 candidate_norm = pd.DataFrame(scaler.transform(candidate_df[SCORING_ATTRS]), columns=SCORING_ATTRS)
-# Avoid division by zero by replacing zero norms with a tiny value
-norms_candidates_safe = np.where(norms_candidates == 0, 1e-9, norms_candidates)
-norm_req_safe = norm_req if norm_req != 0 else 1e-9
 
-cos_sim = candidate_norm.values.dot(req_norm) / (norms_candidates_safe * norm_req_safe)
+# SAFE COSINE applied here
+cos_scores = []
+for i in range(len(candidate_norm)):
+    cos_scores.append(safe_cosine(candidate_norm.iloc[i].values, req_norm))
 
-# Replace NaN with 0
-cos_sim = np.nan_to_num(cos_sim, nan=0.0)
+candidate_df["content_score"] = cos_scores
 
-candidate_df["content_score"] = cos_sim
-
+# -------------------------------
 # Synergy score
+# -------------------------------
 if selected_ids and use_collab:
     candidate_df["collab_score"] = candidate_df["synergy_list"].apply(
         lambda x: len(set(x).intersection(selected_ids))/max(1,len(x))
@@ -123,21 +150,23 @@ if selected_ids and use_collab:
 else:
     candidate_df["collab_score"] = 0
 
+# -------------------------------
 # Exponential Team Boost
+# -------------------------------
 if selected_ids and use_team:
     squad_team_counts = df_all[df_all["player_id"].isin(selected_ids)]["team_name"].value_counts().to_dict()
     
     def exp_team_score(team_name):
         count = squad_team_counts.get(team_name, 0)
-        # Each matching player increases boost exponentially: 0.1 * (2^count - 1)
         return 0.1 * (2**count - 1)
     
     candidate_df["team_score"] = candidate_df["team_name"].apply(exp_team_score)
 else:
     candidate_df["team_score"] = 0
 
-
+# -------------------------------
 # Final score
+# -------------------------------
 candidate_df["final_score"] = (
     0.75 * candidate_df["content_score"] +
     w_collab * candidate_df["collab_score"] +
@@ -185,9 +214,17 @@ with col2:
             card_col1, card_col2 = st.columns([3,1])
             with card_col1:
                 st.markdown(f"**{row['name']}** ({row['position']}) - ⭐ {row['overall_rating']}")
-                st.write(f"Score: {row['final_score']:.2f} | Content: {row['content_score']:.2f} | Collab: {row['collab_score']:.2f} | Team: {row['team_score']:.0f}")
+
+                st.write(
+                    f"Score: {row['final_score']:.2f} | "
+                    f"Content: {row['content_score']:.2f} | "
+                    f"Collab: {row['collab_score']:.2f} | "
+                    f"Team: {row['team_score']:.2f}"
+                )
+
             with card_col2:
-                st.button("➕ Add", key=row['player_id'], on_click=lambda x=row['player_id']: st.session_state.selected.append(x))
+                st.button("➕ Add", key=row['player_id'], 
+                          on_click=lambda x=row['player_id']: st.session_state.selected.append(x))
 
 # -------------------------------
 # Squad Metrics
@@ -205,29 +242,38 @@ if selected_ids:
 if not filtered_candidates.empty:
     st.subheader("📈 Visualizations")
     
-    # Radar
+    # Radar chart
     def plot_radar(player_row, squad_df):
         attrs = MEANINGFUL_ATTRS
         player_vals = player_row[attrs].values
         squad_avg = squad_df[attrs].mean().tolist() if not squad_df.empty else [0]*len(attrs)
+
         fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(r=player_vals, theta=attrs, fill='toself', name=player_row["name"], line=dict(color='red')))
-        fig.add_trace(go.Scatterpolar(r=squad_avg, theta=attrs, fill='toself', name="Squad Avg", line=dict(color='blue')))
-        fig.update_layout(polar=dict(radialaxis=dict(visible=True)), showlegend=True, title="Radar: Top Candidate vs Squad Avg")
+        fig.add_trace(go.Scatterpolar(r=player_vals, theta=attrs, fill='toself',
+                                      name=player_row["name"], line=dict(color='red')))
+        fig.add_trace(go.Scatterpolar(r=squad_avg, theta=attrs, fill='toself',
+                                      name="Squad Avg", line=dict(color='blue')))
+        fig.update_layout(polar=dict(radialaxis=dict(visible=True)),
+                          showlegend=True, title="Radar: Top Candidate vs Squad Avg")
         return fig
 
-    st.plotly_chart(plot_radar(filtered_candidates.iloc[0],
-                               filtered_df_all[filtered_df_all["player_id"].isin(selected_ids)]),
-                    use_container_width=True)
+    st.plotly_chart(
+        plot_radar(
+            filtered_candidates.iloc[0],
+            filtered_df_all[filtered_df_all["player_id"].isin(selected_ids)]
+        ),
+        use_container_width=True
+    )
 
-    # Stacked Bar
+    # Stacked score bar
     def plot_stacked_scores(ranked_df):
         df = ranked_df.copy().head(10)
         fig = go.Figure()
-        fig.add_trace(go.Bar(name='Content', x=df["name"], y=df["content_score"]*0.75, marker_color='green'))
-        fig.add_trace(go.Bar(name='Collaboration', x=df["name"], y=df["collab_score"]*w_collab, marker_color='orange'))
-        fig.add_trace(go.Bar(name='Team Boost', x=df["name"], y=df["team_score"]*team_boost_weight, marker_color='blue'))
-        fig.update_layout(barmode='stack', xaxis_tickangle=-45, yaxis_title="Score", title="Top 10 Player Scores Breakdown")
+        fig.add_trace(go.Bar(name='Content', x=df["name"], y=df["content_score"]*0.75))
+        fig.add_trace(go.Bar(name='Collaboration', x=df["name"], y=df["collab_score"]*w_collab))
+        fig.add_trace(go.Bar(name='Team Boost', x=df["name"], y=df["team_score"]*team_boost_weight))
+        fig.update_layout(barmode='stack', xaxis_tickangle=-45,
+                          yaxis_title="Score", title="Top 10 Player Scores Breakdown")
         return fig
 
     st.plotly_chart(plot_stacked_scores(filtered_candidates), use_container_width=True)
@@ -237,20 +283,21 @@ if not filtered_candidates.empty:
         df = ranked_df.copy().head(5)
         attrs = MEANINGFUL_ATTRS
         fig = go.Figure()
-        colors = ['red','blue','green','orange','purple']
-        for i, attr in enumerate(attrs):
-            fig.add_trace(go.Bar(name=attr, x=df["name"], y=df[attr], marker_color=colors[i]))
-        fig.update_layout(barmode='group', xaxis_tickangle=-45, yaxis_title="Attribute Value", title="Top 5 Players Attribute Comparison")
+        for attr in attrs:
+            fig.add_trace(go.Bar(name=attr, x=df["name"], y=df[attr]))
+        fig.update_layout(barmode='group', xaxis_tickangle=-45,
+                          yaxis_title="Attribute Value", title="Top 5 Players Attribute Comparison")
         return fig
 
     st.plotly_chart(plot_attribute_comparison(filtered_candidates), use_container_width=True)
 
 # -------------------------------
-# Attribute Distribution
+# Attribute Distribution by Position
 # -------------------------------
 with st.expander("📦 Attribute Distribution by Position"):
     for attr in MEANINGFUL_ATTRS:
-        fig = px.box(filtered_df_all, x="position", y=attr, color="position", title=f"{attr.capitalize()} Distribution by Position")
+        fig = px.box(filtered_df_all, x="position", y=attr, color="position",
+                     title=f"{attr.capitalize()} Distribution by Position")
         st.plotly_chart(fig, use_container_width=True)
 
 # -------------------------------
@@ -264,4 +311,3 @@ with st.expander("🥇 Top Candidates by Position"):
                      title="Top Candidates by Position")
         fig.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig, use_container_width=True)
-
