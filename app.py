@@ -104,9 +104,15 @@ with st.sidebar.expander("🤝 Collaboration & Team Boost", expanded=True):
 # Vectorized scoring
 # -------------------------------
 candidate_norm = pd.DataFrame(scaler.transform(candidate_df[SCORING_ATTRS]), columns=SCORING_ATTRS)
-norms_candidates = np.linalg.norm(candidate_norm.values, axis=1)
-norm_req = np.linalg.norm(req_norm)
-cos_sim = candidate_norm.values.dot(req_norm) / (norms_candidates * norm_req)
+# Avoid division by zero by replacing zero norms with a tiny value
+norms_candidates_safe = np.where(norms_candidates == 0, 1e-9, norms_candidates)
+norm_req_safe = norm_req if norm_req != 0 else 1e-9
+
+cos_sim = candidate_norm.values.dot(req_norm) / (norms_candidates_safe * norm_req_safe)
+
+# Replace NaN with 0
+cos_sim = np.nan_to_num(cos_sim, nan=0.0)
+
 candidate_df["content_score"] = cos_sim
 
 # Synergy score
@@ -258,3 +264,4 @@ with st.expander("🥇 Top Candidates by Position"):
                      title="Top Candidates by Position")
         fig.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig, use_container_width=True)
+
