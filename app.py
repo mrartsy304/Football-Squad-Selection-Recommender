@@ -1,4 +1,3 @@
-# app.py
 # -------------------------------
 # Import required libraries
 # -------------------------------
@@ -18,42 +17,27 @@ st.set_page_config(
 )
 
 # -------------------------------
-# Load dataset
+# Load dataset (synergy_list as tuple to remove Streamlit hash warning)
 # -------------------------------
 @st.cache_data
 def load_df(path="football_players_dataset.csv"):
     df = pd.read_csv(path)
-    df["synergy_list"] = df["synergy_list"].fillna("").apply(lambda x: x.split(",") if x else [])
+    df["synergy_list"] = df["synergy_list"].fillna("").apply(lambda x: tuple(x.split(",")) if x else ())
     return df
 
 df_all = load_df()
 
 # -------------------------------
-# Safe Cosine Similarity
+# Safe Cosine Similarity (vectorized)
 # -------------------------------
-def safe_cosine(a, b):
-    """Robust cosine similarity preventing divide-by-zero and invalid norms."""
-    a = np.array(a, dtype=float)
-    b = np.array(b, dtype=float)
-
-    # If arrays are empty
-    if a.size == 0 or b.size == 0:
-        return 0.0
-
-    # Replace NaN with 0
-    a = np.nan_to_num(a)
-    b = np.nan_to_num(b)
-
-    dot = np.dot(a, b)
-    norm_a = np.linalg.norm(a)
-    norm_b = np.linalg.norm(b)
-
-    # If either norm is zero, similarity is zero
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-
-    return dot / (norm_a * norm_b)
-
+def safe_cosine_vectorized(candidate_matrix, req_vector):
+    norm_candidates = np.linalg.norm(candidate_matrix, axis=1)
+    norm_req = np.linalg.norm(req_vector)
+    dot_products = candidate_matrix @ req_vector
+    with np.errstate(divide='ignore', invalid='ignore'):
+        cos_sim = np.divide(dot_products, norm_candidates * norm_req)
+        cos_sim[np.isnan(cos_sim)] = 0.0
+    return cos_sim
 
 # -------------------------------
 # Identify numeric attributes
@@ -65,7 +49,6 @@ NUM_ATTRS = [col for col in NUM_ATTRS if col not in ["player_id","overall_rating
 # Sidebar: Coach Attribute Selection
 # -------------------------------
 st.sidebar.title("🏋️ Coach Attribute Selection")
-
 if "all_attrs_selected" not in st.session_state:
     st.session_state.all_attrs_selected = True
 
@@ -86,7 +69,6 @@ with st.sidebar.expander("Attribute Selection", expanded=True):
                                       int((col_min+col_max)/2))
             selected_attrs[attr] = val
 
-# If no attributes selected → pick top 5 most important
 if not selected_attrs:
     for attr in NUM_ATTRS[:5]:
         selected_attrs[attr] = int(df_all[attr].mean())
@@ -96,10 +78,14 @@ SCORING_ATTRS = list(selected_attrs.keys())
 # -------------------------------
 # Normalize coach input
 # -------------------------------
-req_df = pd.DataFrame([selected_attrs])
-scaler = MinMaxScaler()
-scaler.fit(df_all[SCORING_ATTRS])
-req_norm = scaler.transform(req_df[SCORING_ATTRS])[0]
+@st.cache_data
+def get_scaler(df, attrs):
+    scaler = MinMaxScaler()
+    scaler.fit(df[attrs])
+    return scaler
+
+scaler = get_scaler(df_all, SCORING_ATTRS)
+req_norm = scaler.transform(pd.DataFrame([selected_attrs]))[0]
 
 # -------------------------------
 # Meaningful attributes for visualization
@@ -132,13 +118,7 @@ with st.sidebar.expander("🤝 Collaboration & Team Boost", expanded=True):
 # Vectorized scoring
 # -------------------------------
 candidate_norm = pd.DataFrame(scaler.transform(candidate_df[SCORING_ATTRS]), columns=SCORING_ATTRS)
-
-# SAFE COSINE applied here
-cos_scores = []
-for i in range(len(candidate_norm)):
-    cos_scores.append(safe_cosine(candidate_norm.iloc[i].values, req_norm))
-
-candidate_df["content_score"] = cos_scores
+candidate_df["content_score"] = safe_cosine_vectorized(candidate_norm.values, req_norm)
 
 # -------------------------------
 # Synergy score
@@ -155,25 +135,36 @@ else:
 # -------------------------------
 if selected_ids and use_team:
     squad_team_counts = df_all[df_all["player_id"].isin(selected_ids)]["team_name"].value_counts().to_dict()
-    
     def exp_team_score(team_name):
         count = squad_team_counts.get(team_name, 0)
         return 0.1 * (2**count - 1)
-    
     candidate_df["team_score"] = candidate_df["team_name"].apply(exp_team_score)
 else:
     candidate_df["team_score"] = 0
 
 # -------------------------------
-# Final score
+# Final score (rounded to 2 decimals)
 # -------------------------------
 candidate_df["final_score"] = (
     0.75 * candidate_df["content_score"] +
     w_collab * candidate_df["collab_score"] +
     team_boost_weight * candidate_df["team_score"]
-)
+).round(2)
 
-candidate_df = candidate_df.sort_values("final_score", ascending=False).reset_index(drop=True)
+# -------------------------------
+# Count requirements matched (tolerance 5%)
+# -------------------------------
+attr_ranges = df_all[SCORING_ATTRS].max() - df_all[SCORING_ATTRS].min()
+tolerance_matrix = np.abs(candidate_df[SCORING_ATTRS] - pd.Series(selected_attrs)) <= 0.05 * attr_ranges
+candidate_df["num_req_matched"] = tolerance_matrix.sum(axis=1)
+
+# -------------------------------
+# Option B Sorting: final_score primary, num_req_matched secondary
+# -------------------------------
+candidate_df = candidate_df.sort_values(
+    ["final_score", "num_req_matched", "overall_rating"],
+    ascending=[False, False, False]
+).reset_index(drop=True)
 
 # -------------------------------
 # Filter by positions & score
@@ -187,7 +178,7 @@ score_threshold = st.sidebar.slider("Minimum Final Score", 0.0, 1.0, 0.5, 0.01)
 filtered_candidates = filtered_candidates[filtered_candidates["final_score"] >= score_threshold]
 
 # -------------------------------
-# Page Layout: Squad & Recommendations
+# Page Layout: Squad & Recommendations (Top 10)
 # -------------------------------
 st.title("⚽ Squad Formation Assistant")
 st.markdown("Build your dream football squad with synergy, team compatibility & stats!")
@@ -213,17 +204,16 @@ with col2:
         for _, row in filtered_candidates.head(top_k).iterrows():
             card_col1, card_col2 = st.columns([3,1])
             with card_col1:
-                st.markdown(f"**{row['name']}** ({row['position']}) - ⭐ {row['overall_rating']}")
-
-                st.write(
+                st.markdown(
+                    f"**{row['name']}** ({row['position']}) - ⭐ {row['overall_rating']} | "
                     f"Score: {row['final_score']:.2f} | "
                     f"Content: {row['content_score']:.2f} | "
                     f"Collab: {row['collab_score']:.2f} | "
-                    f"Team: {row['team_score']:.2f}"
+                    f"Team: {row['team_score']:.2f} | "
+                    f"Req Matched: {row['num_req_matched']}/{len(selected_attrs)}"
                 )
-
             with card_col2:
-                st.button("➕ Add", key=row['player_id'], 
+                st.button("➕ Add", key=row['player_id'],
                           on_click=lambda x=row['player_id']: st.session_state.selected.append(x))
 
 # -------------------------------
@@ -241,13 +231,12 @@ if selected_ids:
 # -------------------------------
 if not filtered_candidates.empty:
     st.subheader("📈 Visualizations")
-    
+
     # Radar chart
     def plot_radar(player_row, squad_df):
         attrs = MEANINGFUL_ATTRS
         player_vals = player_row[attrs].values
         squad_avg = squad_df[attrs].mean().tolist() if not squad_df.empty else [0]*len(attrs)
-
         fig = go.Figure()
         fig.add_trace(go.Scatterpolar(r=player_vals, theta=attrs, fill='toself',
                                       name=player_row["name"], line=dict(color='red')))
@@ -275,7 +264,6 @@ if not filtered_candidates.empty:
         fig.update_layout(barmode='stack', xaxis_tickangle=-45,
                           yaxis_title="Score", title="Top 10 Player Scores Breakdown")
         return fig
-
     st.plotly_chart(plot_stacked_scores(filtered_candidates), use_container_width=True)
 
     # Attribute Comparison
@@ -288,7 +276,6 @@ if not filtered_candidates.empty:
         fig.update_layout(barmode='group', xaxis_tickangle=-45,
                           yaxis_title="Attribute Value", title="Top 5 Players Attribute Comparison")
         return fig
-
     st.plotly_chart(plot_attribute_comparison(filtered_candidates), use_container_width=True)
 
 # -------------------------------
