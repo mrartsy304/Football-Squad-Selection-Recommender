@@ -78,13 +78,27 @@ team_score = 0.1 * (2^num_matching_squad_players - 1)
 
 **d)Final Score:**
 ```text
-final_score = 0.75 * content_score + w_collab * collab_score
+final_score = round(0.75 * content_score + w_collab * collab_score + team_boost_weight * team_score, 2)
+```
+
+**Sorting Mechanism**
+```text
+1 final_score — descending
+
+2 num_req_matched — descending (secondary tie-breaker)
+
+3 overall_rating — descending (tertiary tie-breaker)
+
+This ensures that recommendations respect both similarity and requirement match while providing consistent ranking when multiple players have very close scores.
 ```
 
 ### 4️⃣ Player Selection
 - Select a player from top recommendations.
 - Added players are saved in session state to prevent duplicates.
 - "Reset Squad" button clears all selected players.
+- Final scores now display 2 decimal places for clarity in UI.
+- Sorting now reflects holistic view combining content, synergy, and team boost properly.
+- Top recommendations list is stable and predictable, showing correct order even when scores are very close.
 
 ### 5️⃣ Visualizations
 - Radar Chart: Candidate vs Squad Average
